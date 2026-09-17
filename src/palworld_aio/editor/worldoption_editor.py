@@ -41,16 +41,12 @@ def extract_actual_value(prop):
         return prop.get('value')
     return prop
 class WorldOptionEditorDialog(QDialog):
-    def __init__(self, json_data, sav_path=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.json_data = json_data
-        self.sav_path = sav_path
-        self.settings = json_data['properties']['OptionWorldData']['value']['Settings']['value']
         self.parent_window = parent if parent else None
         self.setWindowTitle(t('worldoption.editor.title') if t else 'WorldOption Settings Editor')
         self.setModal(True)
         self.setMinimumSize(1000, 700)
-        self.editors = {}
         self._setup_ui()
         self._load_theme()
         self.operating_file_path = ""

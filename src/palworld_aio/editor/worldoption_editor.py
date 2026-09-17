@@ -8,6 +8,13 @@ from PySide6.QtGui import QFont, QCursor
 from i18n import t
 from loading_manager import show_warning, show_critical
 from palworld_aio.ui.chrome.styles import ThemeManager
+# DataRole-s for attaching setting data and editor to the setting's list treeitems
+ROLE_SETTING_DATA = Qt.ItemDataRole.UserRole + 1
+ROLE_EDITOR = Qt.ItemDataRole.UserRole + 2
+
+# For including the "origin" structs as part of the settings (see _populate_settings_list and pick_data methods)
+DEBUG_INCLUDE_ENTRYPOINT_PROPERTY = False
+
 from palworld_aio import constants
 def get_src_path():
     return constants.get_src_path()
@@ -42,6 +49,17 @@ class WorldOptionEditorDialog(QDialog):
         self.editors = {}
         self._setup_ui()
         self._load_theme()
+        self.operating_file_path = ""
+    @property
+    def operating_file(self):
+        return self.operating_file_path
+    @operating_file.setter
+    def operating_file(self, value):
+        self.operating_file_path = value
+        self.operating_file_label.setText(value)
+    @property
+    def operating_file_type(self):
+        return os.path.splitext(self.operating_file)[1][1:]
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)

@@ -1,13 +1,18 @@
 import os
-import sys
-from palsav import json_tools
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QFrame, QSpinBox, QDoubleSpinBox, QLineEdit, QComboBox, QWidget, QApplication, QGroupBox, QFormLayout, QGridLayout, QTabWidget, QTextEdit, QListWidget, QListWidgetItem, QSplitter
-from palworld_aio.widgets.toggle_check import ToggleCheckBtn
+from traceback import print_exception
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QCursor
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QComboBox, QWidget, QApplication, QSplitter, QFileDialog, QSizePolicy, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
+from palsav import json_tools
+from palworld_aio.widgets.toggle_check import ToggleCheckBtn
 from i18n import t
-from loading_manager import show_warning, show_critical
+from loading_manager import show_warning, show_critical, show_information
+from palworld_aio import constants
 from palworld_aio.ui.chrome.styles import ThemeManager
+from palworld_aio.widgets.tree_widgets import CheckTree
+from palworld_aio.managers.unreal_ini_parser import UnrealIniParser, META_VALUE_KEY
+from palworld_aio.managers.world_option_descriptor import PropertyDescriptor
+
 # DataRole-s for attaching setting data and editor to the setting's list treeitems
 ROLE_SETTING_DATA = Qt.ItemDataRole.UserRole + 1
 ROLE_EDITOR = Qt.ItemDataRole.UserRole + 2

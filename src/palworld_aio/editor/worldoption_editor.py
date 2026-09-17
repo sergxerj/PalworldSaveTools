@@ -297,6 +297,34 @@ class WorldOptionEditorDialog(QDialog):
             self.reject()
         else:
             super().keyPressEvent(event)
+    def pick_data(self, file_path, data):
+        """Chooses the appropriate entry point to the overall settings struct, and initializes 
+        the self.settings attribute with the hierarchical struct of settings from said entrypoint
+        as PropertyDescriptor instances.
+        entrypoints are currently:
+        .sav - data['properties']['OptionWorldData']['value']['Settings']['value'] 
+        .ini - data.sections['/Script/Pal.PalGameWorldSettings']['OptionSettings'][META_VALUE_KEY]
+        """
+        try:
+            if not DEBUG_INCLUDE_ENTRYPOINT_PROPERTY:
+                if file_is_type(file_path, (".sav", ".json")):
+                    return data, {k: PropertyDescriptor(k,v,"sav") for k,v in data['properties']['OptionWorldData']['value']['Settings']['value'].items()}
+                elif file_is_type(file_path, ".ini"):
+                    return data, {k: PropertyDescriptor(k,v,"ini") for k,v in data.sections['/Script/Pal.PalGameWorldSettings']['OptionSettings'][META_VALUE_KEY].items()}
+                else:
+                    return (None, None)
+            else:
+                # Currently just for giggles and to prove that the struct-type properties compatibility works
+                if file_is_type(file_path, (".sav", ".json")):
+                    return data, {k: PropertyDescriptor(k,v,"sav") for k,v in data['properties']['OptionWorldData']['value'].items()}
+                elif file_is_type(file_path, ".ini"):
+                    return data, {k: PropertyDescriptor(k,v,"ini") for k,v in data.sections['/Script/Pal.PalGameWorldSettings'].items()}
+                else:
+                    return (None, None)
+        except Exception as e:
+            show_warning(self, t('error.title') if t else 'Error', f'Failed to pick data from file:\n{str(file_path)}\n')
+            print_exception(e)
+            return (None, None)
 def edit_worldoption_settings(json_data, sav_path=None, parent=None):
     dialog = WorldOptionEditorDialog(json_data, sav_path, parent)
     result = dialog.exec()

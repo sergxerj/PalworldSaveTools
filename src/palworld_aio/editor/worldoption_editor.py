@@ -132,6 +132,7 @@ class WorldOptionEditorDialog(QDialog):
         save_btn.setCursor(QCursor(Qt.PointingHandCursor))
         save_btn.clicked.connect(self._save_to_file)
         export_as_ini = QPushButton("Export as ini")
+        export_as_ini.clicked.connect(self.export_to_ini)
         bottom_btn_row_layout.addWidget(save_btn)
         bottom_btn_row_layout.addWidget(export_as_ini)
         cancel_btn = QPushButton(t('worldoption.editor.cancel') if t else 'Cancel')
@@ -375,17 +376,63 @@ class WorldOptionEditorDialog(QDialog):
             print_exception(e)
             show_warning(self, t('error.title') if t else 'Error', f'Failed to load *.sav file:\n{str(e)}, {e.__traceback__.tb_lineno}')
     def _save_to_file(self):
-        if not self.sav_path:
-            show_warning(self, t('error.title') if t else 'Error', t('worldoption.editor.no_file_path') if t else 'No file path provided. Cannot save.')
+        if not self.operating_file:
+            show_warning(self, t('error.title') if t else 'Error', 'No file loaded. Cannot save.')
             return
         try:
-            from palworld_aio.utils import json_to_sav
-            json_to_sav(self.json_data, self.sav_path)
-            self.accept()
+            if file_is_type(self.operating_file, ".ini"):
+                self.full_data.write(self.operating_file)
+            elif file_is_type(self.operating_file, (".sav", ".json")):
+                from palworld_aio.utils import json_to_sav
+                json_to_sav(self.full_data, self.operating_file)
+            show_information(self, t('success.title') if t else 'Success', 'WorldOption settings saved successfully!')
         except Exception as e:
             import traceback
             error_details = f"{(t('worldoption.editor.save_failed') if t else 'Failed to save:')}\n{str(e)}\n\n{traceback.format_exc()}"
             show_critical(self, t('error.title') if t else 'Error', error_details)
+    def export_to_ini(self):
+        output_file, _ = QFileDialog.getSaveFileName(self, "#TOD i18n title" if t else 'Export Config file as ini', os.path.join(os.path.dirname(self.operating_file), 'PalWorldSettings.ini'),'*.ini', )
+        if file_is_type(self.operating_file, ".ini"):
+            p = self.full_data
+        elif file_is_type(self.operating_file, (".sav", ".json")):
+            p = UnrealIniParser()
+
+            # Recursively initialize the values, following structs by keeping a stack of 
+            # key hierarchy usable by (UnrealIniParser()).set_value()'s key_list argument  
+            # Initialize to having the "origin" key
+            key_list = ['OptionSettings']
+            def _recursive_setter(ex_child_setting: PropertyDescriptor, key_list: list[str]):
+                if children := ex_child_setting.children:
+                    for child_value in children.values():
+                        key_list.append(ex_child_setting.resolve_format_name("ini"))
+                        _recursive_setter(child_value, key_list)
+                        key_list.pop()
+                else:
+                    p.set_value(section='/Script/Pal.PalGameWorldSettings', key_list=key_list, value=ex_child_setting.value)
+
+            for ex_setting in self.settings.values():
+                key_list.append(ex_setting.resolve_format_name("ini"))
+                if children := ex_setting.children:
+                    for child_value in children.values():
+                        key_list.append(child_value.resolve_format_name("ini"))
+                        _recursive_setter(child_value, key_list)
+                        key_list.pop()
+                else:
+                    p.set_value(section='/Script/Pal.PalGameWorldSettings', key_list=key_list, value=ex_setting.value)
+                key_list.pop()
+        else:
+            show_warning(self, "No exportable file loaded." ,"No loaded file format detected that can be exported.")
+            return
+
+        p.write(output_file)
+
+        # double-check
+        p_check = UnrealIniParser()
+        p_check.read(output_file)
+        if p == p_check:
+            show_information(self, "OK", "File correctly exported")
+        else:
+            show_warning(self,"Warning", "Exported content did not match content in editor. Manually check the exported file for existence/consistency.")
     def _load_theme(self):
         ThemeManager.apply_to_widget(self)
     def keyPressEvent(self, event):

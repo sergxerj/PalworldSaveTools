@@ -158,6 +158,7 @@ class WorldOptionEditorDialog(QDialog):
         prop = self.settings[setting_name]
         prop_type = prop.get('type', '')
         actual_value = extract_actual_value(prop)
+    def _clear_editor_layout(self):
         while self.editor_layout.count():
             item = self.editor_layout.takeAt(0)
             if item:

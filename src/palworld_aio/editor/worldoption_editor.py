@@ -22,24 +22,6 @@ DEBUG_INCLUDE_ENTRYPOINT_PROPERTY = False
 
 def file_is_type(file_path, file_type):
     return os.path.basename(file_path).endswith(file_type)
-def extract_actual_value(prop):
-    if not isinstance(prop, dict):
-        return prop
-    prop_type = prop.get('type', '')
-    if prop_type == 'EnumProperty':
-        val = prop.get('value')
-        if isinstance(val, dict):
-            return val.get('value', val)
-        return val
-    elif prop_type == 'BoolProperty':
-        return prop.get('value', False)
-    elif prop_type == 'ArrayProperty':
-        return prop.get('value', {})
-    elif prop_type == 'StructProperty':
-        return prop.get('value', {})
-    elif 'value' in prop:
-        return prop.get('value')
-    return prop
 class WorldOptionEditorDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -91,7 +73,6 @@ class WorldOptionEditorDialog(QDialog):
         search_label = QLabel(t('worldoption.editor.search') if t else 'Search:')
         search_label.setFont(QFont(constants.FONT_FAMILY, 10, QFont.Bold))
         left_layout.addWidget(search_label)
-        from PySide6.QtWidgets import QLineEdit
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText(t('worldoption.editor.filter_placeholder') if t else 'Filter settings...')
         self.search_box.textChanged.connect(self._filter_settings)
@@ -137,8 +118,6 @@ class WorldOptionEditorDialog(QDialog):
         cancel_btn.clicked.connect(self.reject)
         bottom_btn_row_layout.addWidget(cancel_btn)
         main_layout.addLayout(bottom_btn_row_layout)
-        self._populate_settings_list()
-        self.settings_list.currentRowChanged.connect(self._on_setting_selected)
     def _populate_settings_list(self):
         """Recursively initializes the settings list tree widget, attaching to 
         the tree items' custom `Qt.ItemDataRole` of ROLE_SETTING_DATA the 
@@ -464,8 +443,8 @@ class WorldOptionEditorDialog(QDialog):
             show_warning(self, t('error.title') if t else 'Error', f'Failed to pick data from file:\n{str(file_path)}\n')
             print_exception(e)
             return (None, None)
-def edit_worldoption_settings(json_data, sav_path=None, parent=None):
-    dialog = WorldOptionEditorDialog(json_data, sav_path, parent)
+def edit_worldoption_settings(parent=None):
+    dialog = WorldOptionEditorDialog(parent)
     result = dialog.exec()
     if result == QDialog.Accepted:
         return True
@@ -479,6 +458,6 @@ if __name__ == '__main__':
         print('No file selected')
         exit(0)
     data = json_tools.load(json_path)
-    result = edit_worldoption_settings(data, json_path)
+    result = edit_worldoption_settings()
     if result:
         print('Settings saved successfully!')

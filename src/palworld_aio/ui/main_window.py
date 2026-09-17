@@ -198,34 +198,38 @@ class MainWindow(QMainWindow):
         self._setup_connections()
         self.status_stream = StatusBarStream(self.status_bar, self)
         self.status_stream.detach_state_changed.connect(self._on_detach_state_changed)
-        sys.stdout = self.status_stream
-        sys.stderr = self.status_stream
-        from palsav import setup_logging
-        class _StatusBarLogHandler(logging.StreamHandler):
-            def __init__(self, stream):
-                super().__init__(stream)
-            def emit(self, record):
-                try:
-                    self.stream.write(self.format(record) + '\n')
-                except Exception:
-                    self.handleError(record)
-        handler = _StatusBarLogHandler(self.status_stream)
-        handler.setLevel(logging.INFO)
-        handler.raiseExceptions = False
-        handler.setFormatter(logging.Formatter('{message}', style='{'))
-        root_logger = logging.getLogger()
-        root_logger.addHandler(handler)
-        setup_logging()
-        for h in list(root_logger.handlers):
-            if h is handler:
-                continue
-            if isinstance(h, logging.StreamHandler) and (h.stream is None or h.stream is sys.stderr):
-                root_logger.removeHandler(h)
-                h.close()
-        logging.lastResort = None
-        if self.user_settings.get('console_detached', False):
-            self.status_stream.detach()
-            self.sidebar.set_console_visible(True)
+        DEBUG = bool(os.environ.get('PST_DEBUG', '') in ('1', 'true', 'True'))
+        if DEBUG:
+            print("ERROR STREAM NOT REDIRECTED FROM CONSOLED", file=sys.stderr)
+        else: 
+            sys.stdout = self.status_stream
+            sys.stderr = self.status_stream
+            from palsav import setup_logging
+            class _StatusBarLogHandler(logging.StreamHandler):
+                def __init__(self, stream):
+                    super().__init__(stream)
+                def emit(self, record):
+                    try:
+                        self.stream.write(self.format(record) + '\n')
+                    except Exception:
+                        self.handleError(record)
+            handler = _StatusBarLogHandler(self.status_stream)
+            handler.setLevel(logging.INFO)
+            handler.raiseExceptions = False
+            handler.setFormatter(logging.Formatter('{message}', style='{'))
+            root_logger = logging.getLogger()
+            root_logger.addHandler(handler)
+            setup_logging()
+            for h in list(root_logger.handlers):
+                if h is handler:
+                    continue
+                if isinstance(h, logging.StreamHandler) and (h.stream is None or h.stream is sys.stderr):
+                    root_logger.removeHandler(h)
+                    h.close()
+            logging.lastResort = None
+            if self.user_settings.get('console_detached', False):
+                self.status_stream.detach()
+                self.sidebar.set_console_visible(True)
     def _setup_ui(self):
         self.setWindowTitle(t('deletion.title') if t else 'All-in-One Tools')
         self.setMinimumSize(1200, 750)

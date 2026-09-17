@@ -1390,25 +1390,8 @@ class MainWindow(QMainWindow):
             dlg.exec()
 
     def _load_worldoption(self):
-        from ..utils import sav_to_json
-        from common import get_preferred_save_path
-        sav_path, _ = QFileDialog.getOpenFileName(self, t('menu.file.load_worldoption') if t else 'Load WorldOption', get_preferred_save_path(), 'WorldOption.sav (WorldOption.sav)')
-        if not sav_path:
-            return
-        if not os.path.basename(sav_path).startswith('WorldOption'):
-            self._show_warning(t('error.title') if t else 'Error', 'Please select a WorldOption.sav file')
-            return
-        try:
-            json_data = sav_to_json(sav_path)
-            if 'properties' not in json_data or 'OptionWorldData' not in json_data.get('properties', {}):
-                self._show_warning(t('error.title') if t else 'Error', 'Invalid WorldOption.sav structure')
-                return
-            from palworld_aio.editor.worldoption_editor import edit_worldoption_settings
-            result = edit_worldoption_settings(json_data, sav_path, self)
-            if result:
-                self._show_info(t('success.title') if t else 'Success', f'WorldOption settings saved successfully!\n\nLocation: {sav_path}')
-        except Exception as e:
-            self._show_error(t('error.title') if t else 'Error', f'Failed to load WorldOption.sav:\n{str(e)}')
+        from palworld_aio.editor.worldoption_editor import edit_worldoption_settings
+        result = edit_worldoption_settings(self)
     def _delete_empty_guilds(self):
         if not constants.loaded_level_json:
             msg_box = self._create_message_box(QMessageBox.Warning)

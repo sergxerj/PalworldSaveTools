@@ -81,7 +81,9 @@ class WorldOptionEditorDialog(QDialog):
         #  top button row layout
         top_btn_row_layout = QHBoxLayout()
         self.load_button = QPushButton("Load file")
+        self.load_button.clicked.connect(self.load_config_file)
         self.import_apply_button = QPushButton("Import && apply from file")
+        self.import_apply_button.clicked.connect(self.import_and_apply_file)
         top_btn_row_layout.addWidget(self.load_button)
         top_btn_row_layout.addWidget(self.import_apply_button)
         main_layout.addLayout(top_btn_row_layout)
@@ -306,31 +308,72 @@ class WorldOptionEditorDialog(QDialog):
                 control.setCurrentIndex(index)
         elif isinstance(control, CheckTree):
             control.setValue(value)
+    def load_config_file(self):
+        """Loads the main operating file"""
+        loaded_file_path, _ = QFileDialog.getOpenFileName(self, 'Load Config file', '', '*.sav *.ini')
+        loaded_file_data = self._open_config_file(loaded_file_path)
+        self.full_data, self.settings = self.pick_data(loaded_file_path, loaded_file_data)  
+        # set the operating file only after settings have been detected properly detected and registered in the target file
+        if self.settings:
+            self._clear_editor_layout()
+            self.settings_list.clear()
+            self.operating_file = loaded_file_path
+            self._populate_settings_list()
+    def import_and_apply_file(self):
+        """Imports a settings file and applies the configuration in it to the loaded file"""
+        if not self.operating_file:
+            show_warning(self, t('error.title') if t else 'Error', 'Cannot *Import* settings to apply without a settings file *Loaded*.')
             return
-        editor = self.editors[prop_name]['editor']
-        prop = self.settings[prop_name]
-        if prop_type == 'BoolProperty':
-            new_value = editor.isChecked()
-        elif prop_type == 'IntProperty':
-            new_value = editor.value()
-        elif prop_type == 'FloatProperty':
-            new_value = editor.value()
-        elif prop_type == 'StrProperty':
-            new_value = editor.text()
-        elif prop_type == 'EnumProperty':
-            new_value = editor.currentText()
-        else:
+        imported_file_path,_ = QFileDialog.getOpenFileName(self, 'Import Config file', os.path.join(os.path.dirname(self.operating_file)), '*.sav *.ini')
+        imported_file_data = self._open_config_file(imported_file_path)
+        _, imported_settings = self.pick_data(imported_file_path, imported_file_data)
+        if imported_settings:
+            operating_filetype = self.operating_file_type.lower()
+            # Set imported property values in their corresponding working file properties, recursively following any structs
+            def _recursive_setter(imported_child_setting: PropertyDescriptor, operating_child_dict: dict[str, PropertyDescriptor]):
+                setting_key = imported_child_setting.resolve_format_name(operating_filetype)
+                if children := imported_child_setting.children:
+                    for child_value in children.values():
+                        _recursive_setter(child_value, operating_child_dict[setting_key].children)
+                else:
+                    operating_child_dict[setting_key].value = imported_child_setting.value
+
+            for imported_setting in imported_settings.values():
+                setting_key = imported_setting.resolve_format_name(operating_filetype)
+                operating_setting = self.settings[setting_key]
+                if children := imported_setting.children:
+                    for child_value in children.values():
+                        _recursive_setter(child_value, operating_setting.children)
+                else:
+                    operating_setting.value = imported_setting.value
+        # force update of current control in view, if any
+        self.settings_list.currentItemChanged.emit(self.settings_list.currentItem(), None)
+    def _open_config_file(self,file_path) -> UnrealIniParser|dict|None:
+        """ Loads a .sav or .ini file, determining type by extension and applying approprate handling before returning contents as a dict of the options contained """
+        if not file_path:
             return
-        if prop_type == 'BoolProperty':
-            prop['value'] = new_value
-        elif prop_type == 'EnumProperty':
-            original_value = prop.get('value')
-            if isinstance(original_value, dict) and 'type' in original_value:
-                prop['value']['value'] = new_value
+        try:
+            if file_is_type(file_path, '.ini'):
+                parser = UnrealIniParser()
+                parser.read(file_path)
+                return parser
+            elif file_is_type(file_path, '.json'):
+                json_data = json_tools.load(file_path)
+                if 'properties' not in json_data or 'OptionWorldData' not in json_data.get('properties', {}):
+                    show_warning(self ,t('error.title') if t else 'Error', 'Invalid WorldOption.sav structure')
+                return json_data
+            elif file_is_type(file_path, '.sav'):
+                from ..utils import sav_to_json
+                data = sav_to_json(file_path)
+                if 'properties' not in data or 'OptionWorldData' not in data.get('properties', {}):
+                    show_warning(self ,t('error.title') if t else 'Error', 'Invalid WorldOption.sav structure')
+                return data
             else:
-                prop['value'] = new_value
-        elif prop_type in ['IntProperty', 'FloatProperty', 'StrProperty', 'NameProperty']:
-            prop['value'] = new_value
+                show_warning(self, t('error.title') if t else 'Error', 'Please select a *.sav, *.json or *.ini file')
+                return
+        except Exception as e:
+            print_exception(e)
+            show_warning(self, t('error.title') if t else 'Error', f'Failed to load *.sav file:\n{str(e)}, {e.__traceback__.tb_lineno}')
     def _save_to_file(self):
         if not self.sav_path:
             show_warning(self, t('error.title') if t else 'Error', t('worldoption.editor.no_file_path') if t else 'No file path provided. Cannot save.')

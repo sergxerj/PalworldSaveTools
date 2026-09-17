@@ -20,9 +20,8 @@ ROLE_EDITOR = Qt.ItemDataRole.UserRole + 2
 # For including the "origin" structs as part of the settings (see _populate_settings_list and pick_data methods)
 DEBUG_INCLUDE_ENTRYPOINT_PROPERTY = False
 
-from palworld_aio import constants
-def get_src_path():
-    return constants.get_src_path()
+def file_is_type(file_path, file_type):
+    return os.path.basename(file_path).endswith(file_type)
 def extract_actual_value(prop):
     if not isinstance(prop, dict):
         return prop

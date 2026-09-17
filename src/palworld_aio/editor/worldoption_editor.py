@@ -98,8 +98,10 @@ class WorldOptionEditorDialog(QDialog):
         self.search_box.setPlaceholderText(t('worldoption.editor.filter_placeholder') if t else 'Filter settings...')
         self.search_box.textChanged.connect(self._filter_settings)
         left_layout.addWidget(self.search_box)
-        self.settings_list = QListWidget()
+        self.settings_list = QTreeWidget()
+        self.settings_list.setHeaderHidden(True)
         self.settings_list.setObjectName('worldOptionSettingsList')
+        self.settings_list.currentItemChanged.connect(self._on_setting_selected)
         left_layout.addWidget(self.settings_list)
         # right side layout
         right_widget = QWidget()
@@ -139,25 +141,39 @@ class WorldOptionEditorDialog(QDialog):
         self._populate_settings_list()
         self.settings_list.currentRowChanged.connect(self._on_setting_selected)
     def _populate_settings_list(self):
-        setting_names = sorted(self.settings.keys())
-        self.all_setting_names = setting_names
-        for name in setting_names:
-            item = QListWidgetItem(name)
-            self.settings_list.addItem(item)
+        """Recursively initializes the settings list tree widget, attaching to 
+        the tree items' custom `Qt.ItemDataRole` of ROLE_SETTING_DATA the 
+        corresponding setting, including following struct-typed items, which 
+        become tree branches"""
+        def _recursive_setter(setting_key, setting_value, item):
+            child_item = QTreeWidgetItem(item, [setting_key])
+            child_item.setData(0, ROLE_SETTING_DATA, setting_value)
+            if children := setting_value.children:
+                for child_key, child_value in children.items():
+                    _recursive_setter(child_key, child_value, child_item)
+        for key, value in self.settings.items():
+            item = QTreeWidgetItem(self.settings_list, [key])
+            item.setData(0, ROLE_SETTING_DATA, value)
+            if children := value.children:
+                for child_key, child_value in children.items():
+                    _recursive_setter(child_key, child_value, item)
     def _filter_settings(self, text):
         search_text = text.lower()
-        self.settings_list.clear()
-        for name in self.all_setting_names:
-            if search_text in name.lower():
-                item = QListWidgetItem(name)
-                self.settings_list.addItem(item)
-    def _on_setting_selected(self, row):
-        if row < 0:
-            return
-        setting_name = self.settings_list.currentItem().text()
-        prop = self.settings[setting_name]
-        prop_type = prop.get('type', '')
-        actual_value = extract_actual_value(prop)
+        filtered_list = self.settings_list.findItems(search_text, Qt.MatchFlag.MatchContains|Qt.MatchFlag.MatchRecursive)
+        iterator = QTreeWidgetItemIterator(self.settings_list)
+        # iterate over all tree elements and (show/hide) the ones (in/not in) the filtered list
+        for it in iterator:
+            tree_item = it.value()
+            if tree_item in filtered_list:
+                tree_item.setHidden(False)
+            else:
+                tree_item.setHidden(True)
+        # backtrack from matching subitems to unhide their hidden-nonmatching ancestors
+        for item in filtered_list:
+            while parent := item.parent():
+                parent.setHidden(False)
+                parent.setExpanded(True)
+                item = parent
     def _clear_editor_layout(self):
         while self.editor_layout.count():
             item = self.editor_layout.takeAt(0)

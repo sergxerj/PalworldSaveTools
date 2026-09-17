@@ -175,85 +175,121 @@ class WorldOptionEditorDialog(QDialog):
                             cw.hide()
                             cw.setParent(None)
                             cw.deleteLater()
-        self.editor_title.setText(setting_name)
-        editor = self._create_editor(setting_name, prop_type, actual_value)
-        if editor:
-            form_layout = QFormLayout()
-            value_label = QLabel(t('worldoption.editor.current_value') if t else 'Current Value:')
-            value_label.setFont(QFont(constants.FONT_FAMILY, 10, QFont.Bold))
-            form_layout.addRow(value_label)
-            form_layout.addRow(editor)
-            self.editor_layout.addLayout(form_layout)
-            self.editors[setting_name] = {'editor': editor, 'type': prop_type}
-            if prop_type == 'BoolProperty':
-                editor.toggled.connect(lambda: self._update_setting_in_memory(setting_name, prop_type))
-            elif prop_type == 'IntProperty':
-                editor.valueChanged.connect(lambda: self._update_setting_in_memory(setting_name, prop_type))
-            elif prop_type == 'FloatProperty':
-                editor.valueChanged.connect(lambda: self._update_setting_in_memory(setting_name, prop_type))
-            elif prop_type == 'StrProperty':
-                editor.textChanged.connect(lambda: self._update_setting_in_memory(setting_name, prop_type))
-            elif prop_type == 'EnumProperty':
-                editor.currentTextChanged.connect(lambda: self._update_setting_in_memory(setting_name, prop_type))
-    def _create_editor(self, prop_name, prop_type, value):
+    def _on_setting_selected(self, current_item, previous_item):
+        if not current_item:
+            return
+        if previous_item and (previous_editor := previous_item.data(0, ROLE_EDITOR)) and (previous_container:= previous_editor.get("container")):
+            previous_container.hide()
+        prop: PropertyDescriptor = current_item.data(0,ROLE_SETTING_DATA)
+        if editor := current_item.data(0, ROLE_EDITOR):
+            editor_value = editor.get("value") and editor.get("value")()
+            # when the editor is brought up, check if the value matches the value of the prop, and update the control with the prop's value before showing if mismatched (mainly for updating after importing)
+            if prop.value != editor_value:
+                control = editor.get("control")
+                control and self._update_control_with_setting(control, prop)
+            container = editor.get("container")
+            container and container.show()
+        else:
+            editor = self._create_editor(prop)
+            if editor:
+                # store the newly created editor in the tree item's custom ROLE_EDITOR Qt.ItemDataRole
+                current_item.setData(0, ROLE_EDITOR, editor)
+                self.editor_layout.addWidget(editor["container"])
+        self.editor_title.setText(current_item.text(0))
+    def _create_editor(self, prop: PropertyDescriptor):
+        """Creates an returns an editor widget, adding a signal connector
+        callback to the relevant controls for setting the associated 
+        prop value by storing it in the callback closure."""
+        prop_type = prop.type
+        value = prop.value
+        container = QWidget()
+        container_layout = QVBoxLayout()
+        control = None
+        control_get_value = None
         if prop_type == 'BoolProperty':
-            checkbox = ToggleCheckBtn('')
-            checkbox.setChecked(bool(value))
-            return checkbox
+            control = ToggleCheckBtn('')
+            control_get_value = control.isChecked
+            control.toggled.connect(lambda: self._update_setting_in_memory(prop, control.isChecked()))
+            self._update_control_with_setting(control, prop)
         elif prop_type == 'IntProperty':
-            spinbox = QSpinBox()
-            spinbox.setRange(-999999999, 999999999)
-            spinbox.setValue(int(value) if value is not None else 0)
-            return spinbox
+            control = QSpinBox()
+            control.setRange(
+                prop.allowed_values[0] if prop.allowed_values and len(prop.allowed_values) == 2 else -999999999,
+                prop.allowed_values[1] if prop.allowed_values and len(prop.allowed_values) == 2 else 999999999
+            )
+            control_get_value = control.value
+            control.valueChanged.connect(lambda: self._update_setting_in_memory(prop, control.value()))
+            self._update_control_with_setting(control, prop)
         elif prop_type == 'FloatProperty':
-            doublespinbox = QDoubleSpinBox()
-            doublespinbox.setRange(-999999.0, 999999.0)
-            doublespinbox.setSingleStep(0.1)
-            doublespinbox.setDecimals(2)
-            doublespinbox.setValue(float(value) if value is not None else 0.0)
-            return doublespinbox
+            control = QDoubleSpinBox()
+            control.setRange(
+                prop.allowed_values[0] if prop.allowed_values and len(prop.allowed_values) == 2 else -999999.0,
+                prop.allowed_values[1] if prop.allowed_values and len(prop.allowed_values) == 2 else 999999.0
+            )
+            control.setSingleStep(0.1)
+            control.setDecimals(2)
+            control_get_value = control.value
+            control.valueChanged.connect(lambda: self._update_setting_in_memory(prop, control.value()))
+            self._update_control_with_setting(control, prop)
         elif prop_type == 'StrProperty':
-            lineedit = QLineEdit()
-            lineedit.setText(str(value) if value is not None else '')
-            return lineedit
-        elif prop_type == 'EnumProperty':
-            combobox = QComboBox()
-            if prop_name == 'RandomizerType':
-                options = ['EPalRandomizerType::None', 'EPalRandomizerType::Reg', 'EPalRandomizerType::All']
-            elif prop_name == 'Difficulty':
-                options = ['EPalOptionWorldDifficulty::None', 'EPalOptionWorldDifficulty::Normal', 'EPalOptionWorldDifficulty::Custom']
-            elif prop_name == 'DeathPenalty':
-                options = ['EPalOptionWorldDeathPenalty::None', 'EPalOptionWorldDeathPenalty::Item', 'EPalOptionWorldDeathPenalty::ItemAndEquipment', 'EPalOptionWorldDeathPenalty::All']
-            elif prop_name == 'LogFormatType':
-                options = ['EPalLogFormatType::Text', 'EPalLogFormatType::JSON']
-            else:
-                options = [str(value)] if value else []
-            combobox.addItems(options)
-            if value:
-                index = combobox.findText(str(value))
-                if index >= 0:
-                    combobox.setCurrentIndex(index)
-            return combobox
+            control = QLineEdit()
+            control_get_value = control.text
+            control.textChanged.connect(lambda: self._update_setting_in_memory(prop, control.text()))
+            self._update_control_with_setting(control, prop)
+        elif prop_type in ('EnumProperty', 'NameProperty'): # Single Enums and Names are ideally from a predefined list.
+            control = QComboBox()
+            control.setPlaceholderText("Select an option...")
+            options = prop.allowed_values if prop.allowed_values else []
+            control.addItems(options)
+            control_get_value = control.currentText
+            control.currentTextChanged.connect(lambda: self._update_setting_in_memory(prop, control.currentText()))
+            self._update_control_with_setting(control, prop)
         elif prop_type == 'ArrayProperty':
-            textedit = QTextEdit()
-            textedit.setMaximumHeight(100)
-            textedit.setReadOnly(True)
-            if isinstance(value, dict) and 'values' in value:
-                textedit.setText(str(value['values']))
-            else:
-                textedit.setText(str(value))
-            return textedit
-        elif prop_type == 'StructProperty':
-            label = QLabel(t('worldoption.editor.complex_structure') if t else '(Complex structure - edit manually in JSON)')
-            label.setStyleSheet('color: #888; font-style: italic;')
-            return label
-        elif prop_type == 'NameProperty':
-            lineedit = QLineEdit()
-            lineedit.setText(str(value) if value else '')
-            return lineedit
-        return None
-    def _update_setting_in_memory(self, prop_name, prop_type):
-        if prop_name not in self.editors:
+            if prop.array_type in ("EnumProperty", "NameProperty"):
+                filter_field = QLineEdit()
+                filter_field.setPlaceholderText("Filter visible options...")
+                control = CheckTree(
+                    # dict-type items for ["allowed_values"] should be used for things where the internal name is 
+                    # less suitable than the external as a label
+                    [{'text': element['text'], 'data':element['data'], 'state': element['data'] in value} for element in prop.allowed_values] if isinstance(prop.allowed_values[0], dict)
+                    # if items are not dict-typed then the raw value is fine to use everywhere (array-type items
+                    # don't make much sense to use).
+                    else [{'text': element, 'data':element, 'state': element in value} for element in prop.allowed_values]
+                    ,filter_edit=filter_field)
+                container_layout.addWidget(filter_field)
+                control_get_value = control.value
+                control.treeStateChanged.connect(lambda: self._update_setting_in_memory(prop, control.value()))
+        else:
+            return None
+        container_layout.addWidget(control)
+        description_label = QLabel(prop.description)
+        description_label.setWordWrap(True)
+        container_layout.addWidget(description_label)
+        container.setLayout(container_layout)
+        return {"container": container, "control": control, "value": control_get_value}
+    def _update_setting_in_memory(self, prop, val):
+        if prop.type in ('BoolProperty', 'IntProperty', 'FloatProperty', 'StrProperty', 'EnumProperty', 'NameProperty', 'ArrayProperty'):
+            prop.value = val
+        else:
+            return
+    def _update_control_with_setting(self, control, prop):
+        """Updates the passed QWidget control with the passed property's value. For import updates 
+        and standardized, centralized control initializations"""
+        value = prop.value
+        if isinstance(control, ToggleCheckBtn):
+            control.setChecked(bool(value))
+        elif isinstance(control, QSpinBox):
+            control.setValue(int(value) if value is not None else 0)
+        elif isinstance(control, QDoubleSpinBox):
+            control.setValue(float(value) if value is not None else 0.0)
+        elif isinstance(control, QLineEdit):
+            control.setText(str(value) if value is not None else '')
+        elif isinstance(control, QComboBox):
+            index = control.findText(str(value))
+            if index >= 0:
+                control.setCurrentIndex(index)
+        elif isinstance(control, CheckTree):
+            control.setValue(value)
             return
         editor = self.editors[prop_name]['editor']
         prop = self.settings[prop_name]
